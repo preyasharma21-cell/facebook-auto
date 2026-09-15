@@ -1,7 +1,7 @@
-# AutoPilot Pro - Hugging Face Spaces Production Dockerfile
+# AutoPilot Pro - Production Dockerfile for Render.com & Cloud
 FROM node:20-bookworm-slim
 
-# Install system dependencies: Python, pip, FFmpeg, and tools
+# Install system dependencies: Python, pip, FFmpeg, curl, ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -18,32 +18,29 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip yt-dlp curl-cffi
 
-# Create Hugging Face Spaces standard non-root user (UID 1000)
-RUN useradd -m -u 1000 user
-ENV HOME=/home/user
 WORKDIR /app
 
 # Copy package configuration & install dependencies
-COPY --chown=user:user package*.json ./
+COPY package*.json ./
 RUN npm install
 
 # Copy application source code
-COPY --chown=user:user . .
+COPY . .
 
-# Create necessary directories and set permissions
-RUN mkdir -p uploads data && chown -R user:user /app
+# Create necessary persistent directories and assign permissions to built-in 'node' user (UID 1000)
+RUN mkdir -p uploads data && chown -R node:node /app
 
 # Build Next.js application
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 RUN npm run build
 
-# Switch to non-root user for Hugging Face container security
-USER user
+# Switch to the non-root 'node' user included with Node.js
+USER node
 
-# Port configuration (Works on Render, VPS, and Docker)
-ENV PORT=3000
+# Port configuration for Render ($PORT is dynamically assigned by Render, e.g. 10000)
 ENV HOSTNAME="0.0.0.0"
-EXPOSE 3000 7860
+EXPOSE 10000 3000 7860
 
-CMD ["npm", "run", "start"]
+# Start Next.js on the dynamic PORT provided by Render (defaulting to 3000)
+CMD ["sh", "-c", "npx next start -H 0.0.0.0 -p ${PORT:-3000}"]
