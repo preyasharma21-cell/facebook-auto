@@ -7,7 +7,7 @@ import { ShieldCheck, Lock, User as UserIcon, ArrowRight, AlertCircle, CheckCirc
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -141,7 +141,7 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('REGISTER'); setError(''); if (username === 'admin') setUsername(''); }}
+            onClick={() => { setMode('REGISTER'); setError(''); }}
             style={{
               flex: 1,
               display: 'flex',
@@ -211,7 +211,7 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder={mode === 'LOGIN' ? 'admin' : 'Choose a username'}
+                placeholder={mode === 'LOGIN' ? 'Enter your username' : 'Choose a username'}
                 required
                 className="input-control"
                 style={{ paddingLeft: '40px', height: '44px' }}
@@ -281,11 +281,7 @@ export default function LoginPage() {
           fontSize: '12px',
           color: 'var(--text-muted)'
         }}>
-          {mode === 'LOGIN' ? (
-            <span>Master Admin Default: <strong style={{ color: 'var(--primary)' }}>admin / admin123456</strong></span>
-          ) : (
-            <span>Each account gets a completely private workspace with isolated Facebook pages.</span>
-          )}
+          <span>🔒 Private & Secure Cloud Workspace</span>
         </div>
       </div>
     </div>
