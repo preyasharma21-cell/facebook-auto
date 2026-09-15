@@ -1,0 +1,31 @@
+{
+  "name": "facebook-autopilot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private Multi-Page Facebook Content Automation & Scheduling Platform",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "worker": "node scripts/worker-runner.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "lucide-react": "^0.447.0",
+    "next": "14.2.15",
+    "pg": "^8.13.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.16.11",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.6.3"
+  }
+}

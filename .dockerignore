@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+uploads/*.mp4
+uploads/*.m4a
+uploads/*.part
+uploads/*.jpg
+*.log
+cookies.txt
+scratch_test.mjs

@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://fb_owner:fb_secure_pass_123@postgres:5432/fb_autopilot
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=production-secret-fb-autopilot-must-change-in-prod-xyz789
+      - DEFAULT_TIMEZONE=Asia/Karachi
+      - STORAGE_PROVIDER=local
+      - STORAGE_LOCAL_DIR=/app/uploads
+    volumes:
+      - media_storage:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "worker"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://fb_owner:fb_secure_pass_123@postgres:5432/fb_autopilot
+      - REDIS_URL=redis://redis:6379
+      - DEFAULT_TIMEZONE=Asia/Karachi
+      - STORAGE_PROVIDER=local
+      - STORAGE_LOCAL_DIR=/app/uploads
+    volumes:
+      - media_storage:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=fb_owner
+      - POSTGRES_PASSWORD=fb_secure_pass_123
+      - POSTGRES_DB=fb_autopilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fb_owner -d fb_autopilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  media_storage:
