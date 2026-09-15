@@ -6,9 +6,10 @@ export async function GET(req: NextRequest) {
   const auth = requireAuth(req);
   if ('response' in auth) return auth.response;
 
-  const stats = db.getDashboardStats();
+  const currentUserId = auth.user.id;
+  const stats = db.getDashboardStats(currentUserId);
   const recentLogs = db.getLogs(6);
-  const recentJobs = db.getJobs().slice(0, 5);
+  const recentJobs = db.getJobsForUser(currentUserId).slice(0, 5);
 
   return NextResponse.json({
     stats,

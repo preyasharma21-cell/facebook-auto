@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
       const caption = defaultCaption ? defaultCaption.replace('{filename}', cleanTitle) : cleanTitle;
 
       const asset = db.createMediaAsset({
+        userId: auth.user.id,
         filename: path.basename(file.name),
         filePath: `uploads/${safeFilename}`,
         thumbnailPath: finalThumbUrl,
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
           const scheduledDate = new Date(now.getTime() + (uploadedAssets.length * 3600000));
 
           db.createPostingJob({
+            userId: auth.user.id,
             queueId: `queue-${targetPage.id}`,
             pageId: targetPage.id,
             mediaId: asset.id,

@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       const scheduleTime = new Date(now + (i + 1) * gapMinutes * 60000).toISOString();
 
       const result = await videoDownloaderService.downloadVideo(url, {
+        userId: auth.user.id,
         destinationPageId,
         publishMode: publishMode || 'SCHEDULE',
         scheduleTime,

@@ -1,9 +1,10 @@
-export type UserRole = 'OWNER';
+export type UserRole = 'OWNER' | 'USER';
 
 export interface User {
   id: string;
   username: string;
   passwordHash: string;
+  role?: UserRole;
   twoFactorSecret?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -31,6 +32,7 @@ export interface FacebookAccount {
 
 export interface FacebookPage {
   id: string;
+  userId?: string;
   accountId: string;
   pageId: string;
   pageName: string;
@@ -48,6 +50,7 @@ export interface FacebookPage {
 
 export interface PageGroup {
   id: string;
+  userId?: string;
   name: string;
   description: string;
   color: string;
@@ -59,6 +62,7 @@ export type MediaSourceType = 'LOCAL_UPLOAD' | 'FOLDER_UPLOAD' | 'INSTAGRAM' | '
 
 export interface MediaAsset {
   id: string;
+  userId?: string;
   filename: string;
   filePath: string;
   thumbnailPath: string;
@@ -104,6 +108,7 @@ export interface CaptionTemplate {
 
 export interface PostingQueue {
   id: string;
+  userId?: string;
   pageId: string;
   isPaused: boolean;
   currentPosition: number;
@@ -122,6 +127,7 @@ export type JobStatus =
 
 export interface PostingJob {
   id: string;
+  userId?: string;
   queueId: string;
   pageId: string;
   mediaId: string;
@@ -144,6 +150,7 @@ export interface PostingJob {
 
 export interface PostingHistory {
   id: string;
+  userId?: string;
   jobId: string;
   pageId: string;
   mediaId: string;

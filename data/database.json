@@ -523,6 +523,27 @@
   "schedules": [],
   "logs": [
     {
+      "level": "INFO",
+      "category": "WORKER",
+      "message": "Background posting daemon initialized (worker-lb6oi)",
+      "id": "log-7eea4556",
+      "timestamp": "2026-09-15T17:38:53.651Z"
+    },
+    {
+      "level": "INFO",
+      "category": "WORKER",
+      "message": "Background posting daemon initialized (worker-tq29n)",
+      "id": "log-51429203",
+      "timestamp": "2026-09-15T17:38:52.111Z"
+    },
+    {
+      "level": "INFO",
+      "category": "WORKER",
+      "message": "Background posting daemon initialized (worker-sjqs4)",
+      "id": "log-d043eb35",
+      "timestamp": "2026-09-15T13:05:28.791Z"
+    },
+    {
       "level": "SUCCESS",
       "category": "WORKER",
       "message": "Posting job [job-0dacda0d] completed successfully. Post ID: 1032421776419175",

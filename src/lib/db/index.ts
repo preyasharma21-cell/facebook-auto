@@ -55,6 +55,7 @@ function getInitialSeedData(): DatabaseSchema {
     id: 'user-owner-01',
     username: 'admin',
     passwordHash: adminPasswordHash,
+    role: 'OWNER',
     twoFactorSecret: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -237,6 +238,70 @@ class DatabaseStore {
 
   getUserById(id: string): User | undefined {
     return this.data.users.find(u => u.id === id);
+  }
+
+  createUser(username: string, passwordHash: string, role: 'OWNER' | 'USER' = 'USER'): User {
+    const user: User = {
+      id: 'user-' + uuidv4().slice(0, 8),
+      username,
+      passwordHash,
+      role,
+      twoFactorSecret: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.data.users.push(user);
+    this.save();
+    return user;
+  }
+
+  // Scoped queries for Multi-User isolation
+  getFacebookPagesForUser(userId: string): FacebookPage[] {
+    return this.data.facebookPages.filter(p => {
+      if (p.userId) return p.userId === userId;
+      return userId === 'user-owner-01';
+    });
+  }
+
+  getMediaAssetsForUser(userId: string): MediaAsset[] {
+    return this.data.mediaAssets.filter(m => {
+      if (m.userId) return m.userId === userId;
+      return userId === 'user-owner-01';
+    });
+  }
+
+  getJobsForUser(userId: string): PostingJob[] {
+    const userPages = this.getFacebookPagesForUser(userId);
+    const pageIds = new Set(userPages.map(p => p.id).concat(userPages.map(p => p.pageId)));
+    return this.data.postingJobs.filter(j => {
+      if (j.userId) return j.userId === userId;
+      return pageIds.has(j.pageId);
+    });
+  }
+
+  getHistoryForUser(userId: string): PostingHistory[] {
+    const userPages = this.getFacebookPagesForUser(userId);
+    const pageIds = new Set(userPages.map(p => p.id).concat(userPages.map(p => p.pageId)));
+    return this.data.postingHistory.filter(h => {
+      if (h.userId) return h.userId === userId;
+      return pageIds.has(h.pageId);
+    });
+  }
+
+  getPageGroupsForUser(userId: string): PageGroup[] {
+    return this.data.pageGroups.filter(g => {
+      if (g.userId) return g.userId === userId;
+      return userId === 'user-owner-01';
+    });
+  }
+
+  getQueuesForUser(userId: string): PostingQueue[] {
+    const userPages = this.getFacebookPagesForUser(userId);
+    const pageIds = new Set(userPages.map(p => p.id).concat(userPages.map(p => p.pageId)));
+    return this.data.postingQueues.filter(q => {
+      if (q.userId) return q.userId === userId;
+      return pageIds.has(q.pageId);
+    });
   }
 
   // Sessions
@@ -561,11 +626,11 @@ class DatabaseStore {
   }
 
   // Dashboard Stats Aggregator
-  getDashboardStats(): any {
-    const pages = this.data.facebookPages;
-    const media = this.data.mediaAssets;
-    const jobs = this.data.postingJobs;
-    const history = this.data.postingHistory;
+  getDashboardStats(userId?: string): any {
+    const pages = userId ? this.getFacebookPagesForUser(userId) : this.data.facebookPages;
+    const media = userId ? this.getMediaAssetsForUser(userId) : this.data.mediaAssets;
+    const jobs = userId ? this.getJobsForUser(userId) : this.data.postingJobs;
+    const history = userId ? this.getHistoryForUser(userId) : this.data.postingHistory;
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);

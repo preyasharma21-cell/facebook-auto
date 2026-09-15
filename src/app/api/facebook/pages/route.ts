@@ -7,23 +7,24 @@ export async function GET(req: NextRequest) {
   const auth = requireAuth(req);
   if ('response' in auth) return auth.response;
 
-  const pages = db.getFacebookPages();
-  const accounts = db.getFacebookAccounts();
-  const groups = db.getPageGroups();
-  const queues = db.getQueues();
-  const jobs = db.getJobs();
+  const currentUserId = auth.user.id;
+  const pages = db.getFacebookPagesForUser(currentUserId);
+  const accounts = db.getFacebookAccounts().filter(a => a.userId === currentUserId || (currentUserId === 'user-owner-01' && !a.userId));
+  const groups = db.getPageGroupsForUser(currentUserId);
+  const queues = db.getQueuesForUser(currentUserId);
+  const jobs = db.getJobsForUser(currentUserId);
 
   const enrichedPages = pages.map(p => {
-    const pageJobs = jobs.filter(j => j.pageId === p.id);
+    const pageJobs = jobs.filter(j => j.pageId === p.id || j.pageId === p.pageId);
     const nextJob = pageJobs.find(j => j.status === 'QUEUED');
-    const queue = queues.find(q => q.pageId === p.id);
+    const queue = queues.find(q => q.pageId === p.id || q.pageId === p.pageId);
 
     return {
       ...p,
       isPaused: queue ? queue.isPaused : false,
       queuedCount: pageJobs.filter(j => j.status === 'QUEUED').length,
       nextScheduledPost: nextJob ? nextJob.scheduledFor : null,
-      groups: groups.filter(g => g.pageIds.includes(p.id)).map(g => ({ id: g.id, name: g.name, color: g.color })),
+      groups: groups.filter(g => g.pageIds.includes(p.id) || g.pageIds.includes(p.pageId)).map(g => ({ id: g.id, name: g.name, color: g.color })),
     };
   });
 
@@ -44,6 +45,11 @@ export async function PUT(req: NextRequest) {
     const page = db.getPageById(id);
     if (!page) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 });
+    }
+
+    // Permission check: ensure page belongs to current user or user is owner
+    if (page.userId && page.userId !== auth.user.id && auth.user.role !== 'OWNER') {
+      return NextResponse.json({ error: 'Unauthorized to modify this page' }, { status: 403 });
     }
 
     const updated = db.upsertFacebookPage({
@@ -73,10 +79,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Page Name and Page ID are required' }, { status: 400 });
     }
 
-    const accounts = db.getFacebookAccounts();
-    const accountId = accounts.length > 0 ? accounts[0].id : 'fb-acc-custom';
+    const accounts = db.getFacebookAccounts().filter(a => a.userId === auth.user.id);
+    const accountId = accounts.length > 0 ? accounts[0].id : `fb-acc-${auth.user.id}`;
 
     const newPage = db.createFacebookPage({
+      userId: auth.user.id,
       accountId,
       pageId,
       pageName,
@@ -91,7 +98,7 @@ export async function POST(req: NextRequest) {
       lastSyncAt: new Date().toISOString(),
     });
 
-    logEvent('SUCCESS', 'FACEBOOK', `Connected new Facebook Page: "${newPage.pageName}" (ID: ${newPage.pageId})`);
+    logEvent('SUCCESS', 'FACEBOOK', `User '${auth.user.username}' connected Page: "${newPage.pageName}" (ID: ${newPage.pageId})`);
     return NextResponse.json({ success: true, page: newPage });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -110,19 +117,28 @@ export async function DELETE(req: NextRequest) {
   }
 
   if (id === 'all') {
-    db.clearAllFacebookPages();
-    logEvent('WARNING', 'FACEBOOK', 'Owner cleared all Facebook Pages from platform');
-    return NextResponse.json({ success: true, message: 'All Facebook Pages removed' });
+    const userPages = db.getFacebookPagesForUser(auth.user.id);
+    for (const p of userPages) {
+      db.deleteFacebookPage(p.id);
+    }
+    logEvent('WARNING', 'FACEBOOK', `User '${auth.user.username}' cleared all their Facebook Pages`);
+    return NextResponse.json({ success: true, message: 'All user Facebook Pages removed' });
   }
 
   const page = db.getPageById(id);
-  const deleted = db.deleteFacebookPage(id);
+  if (!page) {
+    return NextResponse.json({ error: 'Page not found' }, { status: 404 });
+  }
 
+  if (page.userId && page.userId !== auth.user.id && auth.user.role !== 'OWNER') {
+    return NextResponse.json({ error: 'Unauthorized to delete this page' }, { status: 403 });
+  }
+
+  const deleted = db.deleteFacebookPage(id);
   if (deleted) {
-    logEvent('INFO', 'FACEBOOK', `Removed Facebook Page "${page?.pageName || id}"`);
+    logEvent('INFO', 'FACEBOOK', `Removed Facebook Page "${page.pageName || id}"`);
     return NextResponse.json({ success: true, message: 'Page removed successfully' });
   }
 
   return NextResponse.json({ error: 'Page not found' }, { status: 404 });
 }
-

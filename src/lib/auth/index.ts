@@ -2,45 +2,97 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
-import { User } from '@/types';
+import { User, UserRole } from '@/types';
 
 export const SESSION_COOKIE_NAME = 'fb_autopilot_session';
 const SESSION_DURATION_DAYS = 7;
 
-export async function authenticateOwner(password: string): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
-  const settings = db.getSettings();
-  const ownerUsername = process.env.OWNER_USERNAME || 'admin';
-  const owner = db.getUserByUsername(ownerUsername);
+export async function authenticateUser(
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
+  const cleanUsername = username?.trim() || process.env.OWNER_USERNAME || 'admin';
+  const user = db.getUserByUsername(cleanUsername);
 
-  if (!owner) {
-    return { success: false, error: 'Owner user not initialized' };
+  if (!user) {
+    return { success: false, error: 'User not found' };
   }
 
-  const isValid = bcrypt.compareSync(password, owner.passwordHash);
+  const isValid = bcrypt.compareSync(password, user.passwordHash);
   if (!isValid) {
     db.addLog({
       level: 'WARNING',
       category: 'AUTH',
-      message: `Failed login attempt for owner '${ownerUsername}'`,
+      message: `Failed login attempt for user '${cleanUsername}'`,
     });
-    return { success: false, error: 'Invalid owner password' };
+    return { success: false, error: 'Invalid password' };
   }
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
-  const session = db.createSession(owner.id, expiresAt);
+  const session = db.createSession(user.id, expiresAt);
 
   db.addLog({
     level: 'INFO',
     category: 'AUTH',
-    message: `Owner '${ownerUsername}' logged in successfully`,
+    message: `User '${user.username}' logged in successfully`,
   });
 
   return {
     success: true,
-    user: owner,
+    user,
     token: session.token,
   };
+}
+
+export async function registerUser(
+  username: string,
+  password: string
+): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
+  const cleanUsername = username?.trim().toLowerCase();
+
+  if (!cleanUsername || cleanUsername.length < 3) {
+    return { success: false, error: 'Username must be at least 3 characters long' };
+  }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(cleanUsername)) {
+    return { success: false, error: 'Username can only contain letters, numbers, hyphens, and underscores' };
+  }
+
+  if (!password || password.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters long' };
+  }
+
+  const existing = db.getUserByUsername(cleanUsername);
+  if (existing) {
+    return { success: false, error: 'Username is already taken. Please choose another.' };
+  }
+
+  const salt = bcrypt.genSaltSync(10);
+  const passwordHash = bcrypt.hashSync(password, salt);
+
+  const newUser = db.createUser(cleanUsername, passwordHash, 'USER');
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
+  const session = db.createSession(newUser.id, expiresAt);
+
+  db.addLog({
+    level: 'INFO',
+    category: 'AUTH',
+    message: `New user '${newUser.username}' registered successfully`,
+  });
+
+  return {
+    success: true,
+    user: newUser,
+    token: session.token,
+  };
+}
+
+export async function authenticateOwner(password: string): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
+  const ownerUsername = process.env.OWNER_USERNAME || 'admin';
+  return authenticateUser(ownerUsername, password);
 }
 
 export function verifySessionToken(token?: string): User | null {
@@ -75,7 +127,7 @@ export function requireAuth(req: NextRequest): { user: User } | { response: Next
   if (!user) {
     return {
       response: NextResponse.json(
-        { error: 'Unauthorized: Owner session required' },
+        { error: 'Unauthorized: User session required' },
         { status: 401 }
       ),
     };

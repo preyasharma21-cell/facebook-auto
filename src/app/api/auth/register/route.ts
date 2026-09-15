@@ -1,38 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateUser, SESSION_COOKIE_NAME } from '@/lib/auth';
+import { registerUser, SESSION_COOKIE_NAME } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { username, password } = body;
 
-    if (!password) {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json(
+        { error: 'Username and password are required' },
+        { status: 400 }
+      );
     }
 
-    const authResult = await authenticateUser(username || 'admin', password);
+    const result = await registerUser(username, password);
 
-    if (!authResult.success || !authResult.token) {
+    if (!result.success || !result.token) {
       return NextResponse.json(
-        { error: authResult.error || 'Authentication failed' },
-        { status: 401 }
+        { error: result.error || 'Registration failed' },
+        { status: 400 }
       );
     }
 
     const response = NextResponse.json({
       success: true,
       user: {
-        id: authResult.user?.id,
-        username: authResult.user?.username,
-        role: authResult.user?.role,
+        id: result.user?.id,
+        username: result.user?.username,
+        role: result.user?.role,
       },
-      message: 'Login successful',
+      message: 'Account created successfully',
     });
 
-    // Set secure HTTP-only cookie
+    // Set secure HTTP-only cookie so new user is immediately authenticated
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
-      value: authResult.token,
+      value: result.token,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

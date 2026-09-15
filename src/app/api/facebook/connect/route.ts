@@ -152,10 +152,10 @@ export async function POST(req: NextRequest) {
         // 3. Register Account
         const accountId = 'fb-acc-' + meData.id;
         const existingAccounts = db.getFacebookAccounts();
-        const accIdx = existingAccounts.findIndex(a => a.fbUserId === meData.id);
+        const accIdx = existingAccounts.findIndex(a => a.fbUserId === meData.id && a.userId === auth.user.id);
         const accountRecord = {
           id: accountId,
-          userId: 'user-owner-01',
+          userId: auth.user.id,
           fbUserId: meData.id,
           name: meData.name,
           accessTokenEnc: tokenToUse,
@@ -178,6 +178,7 @@ export async function POST(req: NextRequest) {
 
           const pageRecord = db.upsertFacebookPage({
             id: 'page-' + p.id,
+            userId: auth.user.id,
             accountId,
             pageId: p.id,
             pageName: p.name,

@@ -41,6 +41,7 @@ export class VideoDownloaderService {
   async downloadVideo(
     videoUrl: string,
     options: {
+      userId?: string;
       destinationPageId?: string;
       publishMode?: 'SCHEDULE' | 'POST_NOW' | 'LIBRARY_ONLY';
       scheduleTime?: string;
@@ -159,6 +160,7 @@ export class VideoDownloaderService {
 
           // Create Media Asset in Database
           const media = db.createMediaAsset({
+            userId: options.userId,
             filename: actualFilename,
             filePath: `uploads/${actualFilename}`,
             thumbnailPath: finalThumbUrl,
@@ -188,6 +190,7 @@ export class VideoDownloaderService {
                 : (options.scheduleTime || new Date(Date.now() + 1800000).toISOString());
 
               const job = db.createPostingJob({
+                userId: options.userId,
                 queueId: `queue-${targetPage.id}`,
                 pageId: targetPage.id,
                 mediaId: media.id,

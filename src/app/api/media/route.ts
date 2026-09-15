@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const source = searchParams.get('source');
   const status = searchParams.get('status');
 
-  let media = db.getMediaAssets();
+  let media = db.getMediaAssetsForUser(auth.user.id);
 
   if (search) {
     media = media.filter(m => 
@@ -51,8 +51,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Media not found' }, { status: 404 });
   }
 
+  if (media.userId && media.userId !== auth.user.id && auth.user.role !== 'OWNER') {
+    return NextResponse.json({ error: 'Unauthorized to delete this media asset' }, { status: 403 });
+  }
+
   // Safety check: Never delete a file still referenced by an active posting job
-  const activeJobs = db.getJobs().filter(j => j.mediaId === id && (j.status === 'QUEUED' || j.status === 'PUBLISHING'));
+  const activeJobs = db.getJobsForUser(auth.user.id).filter(j => j.mediaId === id && (j.status === 'QUEUED' || j.status === 'PUBLISHING'));
   if (activeJobs.length > 0) {
     return NextResponse.json(
       { error: `Cannot delete media: It is currently scheduled in ${activeJobs.length} active posting job(s)` },

@@ -12,14 +12,17 @@ export async function GET(req: NextRequest) {
   const pageId = searchParams.get('pageId') || undefined;
   const status = searchParams.get('status') || undefined;
 
-  const jobs = db.getJobs({ pageId, status });
-  const mediaList = db.getMediaAssets();
-  const pages = db.getFacebookPages();
+  let jobs = db.getJobsForUser(auth.user.id);
+  if (pageId) jobs = jobs.filter(j => j.pageId === pageId);
+  if (status) jobs = jobs.filter(j => j.status === status);
+
+  const mediaList = db.getMediaAssetsForUser(auth.user.id);
+  const pages = db.getFacebookPagesForUser(auth.user.id);
 
   const enriched = jobs.map(j => ({
     ...j,
     media: mediaList.find(m => m.id === j.mediaId),
-    page: pages.find(p => p.id === j.pageId),
+    page: pages.find(p => p.id === j.pageId || p.pageId === j.pageId),
   }));
 
   return NextResponse.json({ jobs: enriched });
@@ -49,19 +52,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Job queued for immediate retry' });
     }
 
-    // Retry all failed jobs
+    // Retry all failed jobs for current user
     if (action === 'retry_all_failed') {
-      const failedJobs = db.getJobs().filter(j => j.status === 'FAILED');
-      for (const j of failedJobs) {
+      const userFailedJobs = db.getJobsForUser(auth.user.id).filter(j => j.status === 'FAILED');
+      for (const j of userFailedJobs) {
         db.updatePostingJob(j.id, {
           status: 'QUEUED',
           scheduledFor: new Date().toISOString(),
           lastError: null,
         });
       }
-      logEvent('INFO', 'WORKER', `Queued ${failedJobs.length} previously failed jobs for retry`);
+      logEvent('INFO', 'WORKER', `Queued all ${userFailedJobs.length} failed jobs for retry`);
       bgQueueWorker.tick().catch(() => {});
-      return NextResponse.json({ success: true, count: failedJobs.length });
+      return NextResponse.json({ success: true, count: userFailedJobs.length });
     }
 
     // "Post Now" action
@@ -91,6 +94,7 @@ export async function POST(req: NextRequest) {
     if (!targetMedia) return NextResponse.json({ error: 'Media Asset not found' }, { status: 404 });
 
     const job = db.createPostingJob({
+      userId: auth.user.id,
       queueId: `queue-${targetPage.id}`,
       pageId: targetPage.id,
       mediaId: targetMedia.id,
