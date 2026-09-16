@@ -70,13 +70,20 @@ export class VideoDownloaderService {
         cookieToUse = fallbackCookiePath;
       }
 
+      // Determine appropriate extractor args based on whether cookies are available
+      let ytClient = 'android,ios';
+      if (cookieToUse && platform === 'YOUTUBE') {
+        ytClient = 'web,mweb,android';
+      }
+
       // Execute python -m yt_dlp with bot-bypass flags
       const args = [
         '-m', 'yt_dlp',
         '--no-playlist',
         '--no-warnings',
         '--impersonate', 'chrome',
-        '--extractor-args', 'youtube:player_client=android,ios',
+        '--extractor-args', `youtube:player_client=${ytClient}`,
+        '--js-runtimes', 'node',
         '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         '--merge-output-format', 'mp4',
         '-o', outputTemplate,

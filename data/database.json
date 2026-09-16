@@ -525,6 +525,13 @@
     {
       "level": "INFO",
       "category": "WORKER",
+      "message": "Background posting daemon initialized (worker-763qt)",
+      "id": "log-5478a85d",
+      "timestamp": "2026-09-16T13:20:56.218Z"
+    },
+    {
+      "level": "INFO",
+      "category": "WORKER",
       "message": "Background posting daemon initialized (worker-9tvle)",
       "id": "log-075db4a6",
       "timestamp": "2026-09-16T12:57:16.376Z"
