@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
       platform: platform as SocialPlatformType,
       accountName: accountName?.trim() || `${platform} User Session`,
       hasCookies: true,
+      cookiesData: cleanCookies,
       status: 'CONNECTED',
     });
 

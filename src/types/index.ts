@@ -26,6 +26,7 @@ export interface ConnectedPlatformAccount {
   platform: SocialPlatformType;
   accountName?: string;
   hasCookies: boolean;
+  cookiesData?: string;
   status: 'CONNECTED' | 'DISCONNECTED';
   updatedAt: string;
 }
