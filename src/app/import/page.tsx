@@ -4,19 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import {
   DownloadCloud,
-  Youtube,
-  Instagram,
   CheckCircle2,
   AlertCircle,
   Clock,
-  Send,
-  FolderPlus,
   Layers,
   Sparkles,
   ExternalLink,
-  RefreshCw,
-  Sliders,
-  PlayCircle
+  Key,
+  ShieldCheck,
+  X,
+  FileText,
+  Upload,
+  Info
 } from 'lucide-react';
 
 interface FacebookPage {
@@ -37,6 +36,24 @@ interface DownloadResult {
   scheduledJobId?: string;
 }
 
+interface PlatformAccountStatus {
+  platform: string;
+  status: 'CONNECTED' | 'DISCONNECTED';
+  accountName: string | null;
+  hasCookies: boolean;
+  updatedAt: string | null;
+}
+
+const PLATFORMS_LIST = [
+  { id: 'YOUTUBE', name: 'YouTube', color: '#ff0000', icon: '🔴', hint: 'Bypasses "Sign in to confirm you’re not a bot" on YouTube & Shorts.' },
+  { id: 'TIKTOK', name: 'TikTok', color: '#00f2fe', icon: '⚫', hint: 'Bypasses TikTok bot & captcha challenges for 1080p downloads.' },
+  { id: 'INSTAGRAM', name: 'Instagram', color: '#e1306c', icon: '🟣', hint: 'Allows downloading private/high-quality Reels & Stories.' },
+  { id: 'SNAPCHAT', name: 'Snapchat', color: '#fffc00', icon: '🟡', hint: 'Connect Snapchat session for Spotlight video downloads.' },
+  { id: 'KUAISHOU', name: 'Kuaishou (快手)', color: '#ff5000', icon: '🟠', hint: 'Connect session for Kwai / Kuaishou video feeds.' },
+  { id: 'REDNOTE', name: 'RedNote (小红书)', color: '#ff2442', icon: '📕', hint: 'Bypasses Xiaohongshu web crawler login gates.' },
+  { id: 'TWITTER', name: 'X / Twitter', color: '#1da1f2', icon: '🐦', hint: 'Bypasses rate-limiting on Twitter video posts.' },
+];
+
 export default function UniversalDownloaderPage() {
   const [pages, setPages] = useState<FacebookPage[]>([]);
   const [targetPageId, setTargetPageId] = useState<string>('');
@@ -48,6 +65,23 @@ export default function UniversalDownloaderPage() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [results, setResults] = useState<DownloadResult[]>([]);
   const [batchStats, setBatchStats] = useState<{ total: number; successful: number; failed: number } | null>(null);
+
+  // Platform Accounts & Cookies state
+  const [platformAccounts, setPlatformAccounts] = useState<PlatformAccountStatus[]>([]);
+  const [activeModalPlatform, setActiveModalPlatform] = useState<string | null>(null);
+  const [cookiesInput, setCookiesInput] = useState<string>('');
+  const [accountNameInput, setAccountNameInput] = useState<string>('');
+  const [isSavingCookies, setIsSavingCookies] = useState<boolean>(false);
+  const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const loadPlatformAccounts = () => {
+    fetch('/api/social-accounts')
+      .then(res => res.json())
+      .then(data => {
+        if (data.platforms) setPlatformAccounts(data.platforms);
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     fetch('/api/facebook/pages')
@@ -61,6 +95,8 @@ export default function UniversalDownloaderPage() {
         }
       })
       .catch(err => console.error('Failed to load pages', err));
+
+    loadPlatformAccounts();
   }, []);
 
   const parsedUrls = urlsInput
@@ -115,6 +151,64 @@ export default function UniversalDownloaderPage() {
     }
   };
 
+  const handleConnectPlatform = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeModalPlatform) return;
+    setIsSavingCookies(true);
+    setModalMessage(null);
+
+    try {
+      const res = await fetch('/api/social-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: activeModalPlatform,
+          accountName: accountNameInput || `${activeModalPlatform} User Session`,
+          cookiesText: cookiesInput,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setModalMessage({ type: 'error', text: data.error || 'Failed to save session' });
+        setIsSavingCookies(false);
+        return;
+      }
+
+      setModalMessage({ type: 'success', text: `Connected ${activeModalPlatform} session! Robot checks will be bypassed.` });
+      loadPlatformAccounts();
+      setTimeout(() => {
+        setActiveModalPlatform(null);
+        setCookiesInput('');
+        setAccountNameInput('');
+        setModalMessage(null);
+      }, 1500);
+    } catch (err: any) {
+      setModalMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsSavingCookies(false);
+    }
+  };
+
+  const handleDisconnectPlatform = async (platform: string) => {
+    if (!confirm(`Disconnect your ${platform} session?`)) return;
+    try {
+      await fetch(`/api/social-accounts?platform=${platform}`, { method: 'DELETE' });
+      loadPlatformAccounts();
+    } catch {}
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) setCookiesInput(content);
+    };
+    reader.readAsText(file);
+  };
+
   const getPlatformInfo = (url: string) => {
     const l = url.toLowerCase();
     if (l.includes('youtube.com') || l.includes('youtu.be')) {
@@ -125,6 +219,9 @@ export default function UniversalDownloaderPage() {
     }
     if (l.includes('instagram.com')) {
       return { name: 'Instagram', color: '#e1306c', icon: '🟣' };
+    }
+    if (l.includes('snapchat.com')) {
+      return { name: 'Snapchat', color: '#fffc00', icon: '🟡' };
     }
     if (l.includes('kuaishou.com') || l.includes('kwai.com')) {
       return { name: 'Kuaishou (快手)', color: '#ff5000', icon: '🟠' };
@@ -149,7 +246,7 @@ export default function UniversalDownloaderPage() {
               Universal Video Downloader & Auto-Scheduler
             </h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginTop: '4px' }}>
-              Paste links from YouTube, TikTok, Instagram Reels, Kuaishou, RedNote (Xiaohongshu), X, or direct MP4 URLs. The server downloads the media files and automatically schedules or posts them directly to your Facebook Pages.
+              Download and auto-schedule videos from YouTube, TikTok, Instagram, Snapchat, Kwai, RedNote, or X directly to your Facebook Pages 24/7.
             </p>
           </div>
 
@@ -164,30 +261,90 @@ export default function UniversalDownloaderPage() {
             </a>
           </div>
         </div>
+      </div>
 
-        {/* Supported Platforms Badges */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
-          <div className="badge" style={{ background: 'rgba(255, 0, 0, 0.12)', color: '#ff4d4d', border: '1px solid rgba(255, 0, 0, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            🔴 YouTube (Shorts & Videos)
+      {/* Connected Social Platforms & Anti-Bot Sessions Vault */}
+      <div className="glass-card" style={{
+        marginBottom: '24px',
+        border: '1px solid rgba(6, 182, 212, 0.25)',
+        background: 'linear-gradient(180deg, rgba(6, 182, 212, 0.05) 0%, rgba(15, 23, 42, 0.4) 100%)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+          <div>
+            <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={18} color="var(--primary)" />
+              Connected Social Platforms (Anti-Bot Bypass Vault)
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Connect your platform accounts/sessions to bypass YouTube "Sign in to confirm you’re not a bot" and TikTok challenges.
+            </p>
           </div>
-          <div className="badge" style={{ background: 'rgba(0, 242, 254, 0.12)', color: '#38bdf8', border: '1px solid rgba(0, 242, 254, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            ⚫ TikTok (No Watermark)
-          </div>
-          <div className="badge" style={{ background: 'rgba(225, 48, 108, 0.12)', color: '#f472b6', border: '1px solid rgba(225, 48, 108, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            🟣 Instagram (Reels & Clips)
-          </div>
-          <div className="badge" style={{ background: 'rgba(255, 80, 0, 0.12)', color: '#fb923c', border: '1px solid rgba(255, 80, 0, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            🟠 Kuaishou (快手)
-          </div>
-          <div className="badge" style={{ background: 'rgba(255, 36, 66, 0.12)', color: '#f87171', border: '1px solid rgba(255, 36, 66, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            📕 RedNote (小红书 Xiaohongshu)
-          </div>
-          <div className="badge" style={{ background: 'rgba(29, 161, 242, 0.12)', color: '#60a5fa', border: '1px solid rgba(29, 161, 242, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            🐦 X / Twitter
-          </div>
-          <div className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>
-            🌐 Direct MP4 / Video Links
-          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          {PLATFORMS_LIST.map(item => {
+            const acc = platformAccounts.find(a => a.platform === item.id);
+            const isConnected = acc?.status === 'CONNECTED';
+
+            return (
+              <div key={item.id} style={{
+                padding: '12px 14px',
+                borderRadius: '12px',
+                background: isConnected ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+                border: isConnected ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '10px',
+                transition: 'all 0.2s ease'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{item.icon}</span>
+                    <span>{item.name}</span>
+                  </span>
+                  <span style={{
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: isConnected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(148, 163, 184, 0.12)',
+                    color: isConnected ? '#34d399' : '#94a3b8'
+                  }}>
+                    {isConnected ? '✓ Connected' : 'Not Connected'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModalPlatform(item.id);
+                      setCookiesInput('');
+                      setAccountNameInput(acc?.accountName || '');
+                      setModalMessage(null);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ flex: 1, fontSize: '11.5px', padding: '5px 8px', height: '30px', justifyContent: 'center' }}
+                  >
+                    <Key size={12} />
+                    <span>{isConnected ? 'Update Session' : 'Connect Session'}</span>
+                  </button>
+                  {isConnected && (
+                    <button
+                      type="button"
+                      onClick={() => handleDisconnectPlatform(item.id)}
+                      className="btn btn-secondary"
+                      style={{ fontSize: '11.5px', padding: '5px 8px', height: '30px', color: '#f87171' }}
+                      title="Disconnect Account"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -200,7 +357,7 @@ export default function UniversalDownloaderPage() {
             Paste Links & Configure Automation
           </h2>
           <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Enter one video URL per line. You can mix links from YouTube, TikTok, Instagram, Kuaishou, RedNote, etc.
+            Enter one video URL per line. Mix links from YouTube, TikTok, Instagram, Snapchat, Kuaishou, RedNote, etc.
           </p>
 
           <form onSubmit={handleStartDownload} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -219,314 +376,304 @@ export default function UniversalDownloaderPage() {
                   >
                     {pages.map(page => (
                       <option key={page.id} value={page.id}>
-                        {page.pageName} ({page.category || 'Facebook Page'}) {page.status === 'TOKEN_EXPIRED' ? '⚠️ [TOKEN EXPIRED]' : ''}
+                        {page.pageName} ({page.category || 'General'})
                       </option>
                     ))}
                   </select>
-
-                  {pages.find(p => p.id === targetPageId)?.status === 'TOKEN_EXPIRED' && (
-                    <div style={{ marginTop: '8px', padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '12px', color: '#fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span>⚠️ <strong>Meta Token Expired:</strong> Videos will download to Library, but Facebook will reject posting until you update your token.</span>
-                      <a href="/pages" style={{ color: '#ffffff', background: 'var(--danger)', padding: '4px 8px', borderRadius: '4px', textDecoration: 'none', fontWeight: 600, fontSize: '11px', whiteSpace: 'nowrap' }}>
-                        Update Token →
-                      </a>
-                    </div>
-                  )}
+                  <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Downloaded videos will be automatically scheduled or posted to this Page.
+                  </p>
                 </>
               ) : (
-                <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '12.5px', color: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>No Facebook Pages connected yet.</span>
-                  <a href="/pages" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline' }}>
-                    Connect Page →
-                  </a>
+                <div style={{ padding: '12px 14px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: 'var(--radius-md)', color: '#fde047', fontSize: '13px' }}>
+                  No active Facebook Pages connected. You can still download to your <strong>Media Library</strong>, or go to <a href="/pages" style={{ textDecoration: 'underline', fontWeight: 700 }}>Facebook Pages</a> to connect one.
                 </div>
               )}
             </div>
 
-            {/* Publishing Mode Selection */}
+            {/* Video URLs Input Area */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  Video URLs (Bulk Paste Allowed):
+                </label>
+                <span style={{ fontSize: '11.5px', color: parsedUrls.length > 0 ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
+                  {parsedUrls.length} valid URL{parsedUrls.length === 1 ? '' : 's'} detected
+                </span>
+              </div>
+              <textarea
+                value={urlsInput}
+                onChange={e => setUrlsInput(e.target.value)}
+                placeholder="https://www.youtube.com/shorts/...&#10;https://www.tiktok.com/@creator/video/...&#10;https://www.instagram.com/reel/...&#10;https://www.kuaishou.com/short-video/..."
+                rows={6}
+                className="input-control"
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '12.5px',
+                  lineHeight: '1.6',
+                  resize: 'vertical',
+                  padding: '12px'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                <span>One URL per line. Direct downloads from TikTok, Shorts & Reels.</span>
+                {urlsInput.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setUrlsInput('')}
+                    style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '11.5px' }}
+                  >
+                    Clear Links
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Publish Mode Options */}
             <div>
               <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                Publishing Action:
+                Automation Mode:
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                <button
-                  type="button"
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div
                   onClick={() => setPublishMode('SCHEDULE')}
                   style={{
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
-                    border: `1.5px solid ${publishMode === 'SCHEDULE' ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                    background: publishMode === 'SCHEDULE' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
-                    color: '#ffffff',
+                    border: publishMode === 'SCHEDULE' ? '1.5px solid var(--primary)' : '1px solid var(--border-subtle)',
+                    background: publishMode === 'SCHEDULE' ? 'rgba(6, 182, 212, 0.12)' : 'rgba(255, 255, 255, 0.02)',
                     cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '13px' }}>
-                    <Clock size={15} color="var(--primary)" />
-                    <span>Auto-Schedule</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: publishMode === 'SCHEDULE' ? 'var(--primary)' : '#ffffff' }}>
+                    Auto-Schedule
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Queue with intervals
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Stagger into queue
                   </div>
-                </button>
+                </div>
 
-                <button
-                  type="button"
+                <div
                   onClick={() => setPublishMode('POST_NOW')}
                   style={{
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
-                    border: `1.5px solid ${publishMode === 'POST_NOW' ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                    background: publishMode === 'POST_NOW' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
-                    color: '#ffffff',
+                    border: publishMode === 'POST_NOW' ? '1.5px solid #10b981' : '1px solid var(--border-subtle)',
+                    background: publishMode === 'POST_NOW' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
                     cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '13px' }}>
-                    <Send size={15} color="#10b981" />
-                    <span>Post Immediately</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: publishMode === 'POST_NOW' ? '#10b981' : '#ffffff' }}>
+                    Post Now
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Post right after download
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Publish immediately
                   </div>
-                </button>
+                </div>
 
-                <button
-                  type="button"
+                <div
                   onClick={() => setPublishMode('LIBRARY_ONLY')}
                   style={{
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
-                    border: `1.5px solid ${publishMode === 'LIBRARY_ONLY' ? 'var(--primary)' : 'var(--border-subtle)'}`,
-                    background: publishMode === 'LIBRARY_ONLY' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-surface)',
-                    color: '#ffffff',
+                    border: publishMode === 'LIBRARY_ONLY' ? '1.5px solid #a855f7' : '1px solid var(--border-subtle)',
+                    background: publishMode === 'LIBRARY_ONLY' ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255, 255, 255, 0.02)',
                     cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.2s',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '13px' }}>
-                    <FolderPlus size={15} color="#f59e0b" />
-                    <span>Library Only</span>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: publishMode === 'LIBRARY_ONLY' ? '#a855f7' : '#ffffff' }}>
+                    Library Only
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Save without scheduling
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Save without posting
                   </div>
-                </button>
+                </div>
               </div>
             </div>
 
-            {/* Schedule Interval (if Auto-Schedule selected) */}
+            {/* Stagger Interval (if scheduled) */}
             {publishMode === 'SCHEDULE' && (
-              <div style={{ background: 'var(--bg-surface)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Posting Interval Gap:
-                  </label>
-                  <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 700 }}>
-                    Every {intervalMinutes} minutes
-                  </span>
-                </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Stagger Interval Between Posts:
+                </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {[15, 30, 45, 60, 120, 240].map(mins => (
+                  {[15, 30, 60, 120, 240].map(mins => (
                     <button
                       key={mins}
                       type="button"
                       onClick={() => setIntervalMinutes(mins)}
-                      className={`btn ${intervalMinutes === mins ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ flex: 1, padding: '6px 0', fontSize: '11.5px', height: '32px' }}
+                      style={{
+                        flex: 1,
+                        padding: '6px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        border: intervalMinutes === mins ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                        background: intervalMinutes === mins ? 'var(--primary)' : 'transparent',
+                        color: intervalMinutes === mins ? '#000000' : 'var(--text-secondary)',
+                        cursor: 'pointer'
+                      }}
                     >
-                      {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                      {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
                     </button>
                   ))}
                 </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  1st video scheduled in {intervalMinutes}m, 2nd video in {intervalMinutes * 2}m, etc.
+                </p>
               </div>
             )}
 
-            {/* URL Input Box */}
+            {/* Caption & Hashtags Template */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <label style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  Video Links (one per line):
-                </label>
-                <span style={{ fontSize: '11.5px', color: parsedUrls.length > 0 ? 'var(--primary)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {parsedUrls.length} valid URL(s) detected
-                </span>
-              </div>
-              <textarea
-                rows={7}
-                placeholder={`https://www.youtube.com/shorts/dQw4w9WgXcQ
-https://www.tiktok.com/@creator/video/1234567890
-https://www.instagram.com/reel/C8xyz123/
-https://www.kuaishou.com/short-video/xyz
-https://www.xiaohongshu.com/discovery/item/xyz
-https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4`}
-                value={urlsInput}
-                onChange={e => setUrlsInput(e.target.value)}
-                className="input-control font-mono"
-                style={{ fontSize: '12px', lineHeight: 1.6 }}
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Default Caption Template:
+              </label>
+              <input
+                type="text"
+                value={caption}
+                onChange={e => setCaption(e.target.value)}
+                placeholder="Leave blank to use original video title"
+                className="input-control"
+                style={{ height: '38px', fontSize: '13px' }}
               />
             </div>
 
-            {/* Optional Captions & Tags */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Custom Caption Override (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Leave empty to use source video title"
-                  value={caption}
-                  onChange={e => setCaption(e.target.value)}
-                  className="input-control"
-                  style={{ fontSize: '12px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Hashtags
-                </label>
-                <input
-                  type="text"
-                  placeholder="#reels #viral #trending"
-                  value={hashtags}
-                  onChange={e => setHashtags(e.target.value)}
-                  className="input-control"
-                  style={{ fontSize: '12px' }}
-                />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Default Hashtags:
+              </label>
+              <input
+                type="text"
+                value={hashtags}
+                onChange={e => setHashtags(e.target.value)}
+                className="input-control"
+                style={{ height: '38px', fontSize: '13px' }}
+              />
             </div>
 
-            {/* Submit Button */}
+            {/* Action Submit Button */}
             <button
               type="submit"
-              disabled={isProcessing || parsedUrls.length === 0 || (publishMode !== 'LIBRARY_ONLY' && !targetPageId)}
+              disabled={isProcessing || parsedUrls.length === 0}
               className="btn btn-primary"
-              style={{ height: '46px', fontSize: '14px', fontWeight: 700 }}
+              style={{
+                height: '46px',
+                fontSize: '14.5px',
+                fontWeight: 700,
+                marginTop: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
             >
               {isProcessing ? (
                 <>
-                  <RefreshCw size={18} className="animate-spin" />
-                  <span>Downloading & Processing Videos ({parsedUrls.length})...</span>
+                  <div className="spinner-border" style={{ width: '16px', height: '16px' }} />
+                  <span>Downloading & Processing ({parsedUrls.length} links)...</span>
                 </>
               ) : (
                 <>
                   <DownloadCloud size={18} />
-                  <span>
-                    {publishMode === 'SCHEDULE' && `Download & Auto-Schedule (${parsedUrls.length} Videos)`}
-                    {publishMode === 'POST_NOW' && `Download & Post Immediately (${parsedUrls.length} Videos)`}
-                    {publishMode === 'LIBRARY_ONLY' && `Download to Library Only (${parsedUrls.length} Videos)`}
-                  </span>
+                  <span>Start Automated Download ({parsedUrls.length} Links)</span>
                 </>
               )}
             </button>
           </form>
         </div>
 
-        {/* Live Execution & Results Tracker Right */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Telemetry Stats */}
-          <div className="glass-card">
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff', marginBottom: '12px' }}>
-              Ingestion Telemetry
-            </h3>
-
-            {batchStats ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Total Submitted</div>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', marginTop: '2px' }}>
-                    {batchStats.total}
-                  </div>
-                </div>
-
-                <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16, 185, 129, 0.2)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--success)' }}>Successful</div>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--success)', marginTop: '2px' }}>
-                    {batchStats.successful}
-                  </div>
-                </div>
-
-                <div style={{ padding: '12px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--danger)' }}>Failed</div>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--danger)', marginTop: '2px' }}>
-                    {batchStats.failed}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-                {isProcessing ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                    <RefreshCw size={24} color="var(--primary)" className="animate-spin" />
-                    <span>Executing yt-dlp & FFmpeg pipeline on server...</span>
-                  </div>
-                ) : (
-                  <span>Paste video links on the left and start download to see real-time progress.</span>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Results List */}
-          <div className="glass-card" style={{ flex: 1, minHeight: '340px', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#ffffff', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Download & Queue Status</span>
-              {results.length > 0 && (
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {results.length} processed
+        {/* Real-Time Processing & Execution Tracker */}
+        <div>
+          <div className="glass-card" style={{ minHeight: '400px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>Live Batch Progress</span>
+              {batchStats && (
+                <span style={{ fontSize: '12px', fontWeight: 600, color: batchStats.failed > 0 ? '#fbbf24' : '#34d399' }}>
+                  {batchStats.successful} / {batchStats.total} Successful
                 </span>
               )}
-            </h3>
+            </h2>
 
-            {results.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                <PlayCircle size={36} color="var(--border-subtle)" style={{ margin: '0 auto 12px' }} />
-                No downloads executed in this session yet.
+            {/* Processing Loading Indicator */}
+            {isProcessing && (
+              <div style={{
+                padding: '20px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(6, 182, 212, 0.08)',
+                border: '1px solid rgba(6, 182, 212, 0.25)',
+                textAlign: 'center',
+                marginBottom: '20px'
+              }}>
+                <div style={{ fontSize: '20px', marginBottom: '8px' }}>⚡</div>
+                <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#ffffff' }}>
+                  Downloading in Background
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Server is downloading, extracting titles, and merging audio/video streams...
+                </div>
               </div>
-            ) : (
+            )}
+
+            {/* Empty State */}
+            {!isProcessing && results.length === 0 && (
+              <div style={{
+                padding: '50px 20px',
+                textAlign: 'center',
+                color: 'var(--text-muted)'
+              }}>
+                <DownloadCloud size={44} color="var(--border-subtle)" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  No active downloads
+                </div>
+                <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                  Paste URLs on the left and click start to watch live ingestion.
+                </div>
+              </div>
+            )}
+
+            {/* Download Results List */}
+            {results.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {results.map((res, idx) => {
+                {results.map((res, index) => {
                   const plat = getPlatformInfo(res.url);
+
                   return (
                     <div
-                      key={idx}
+                      key={index}
                       style={{
                         padding: '12px 14px',
-                        background: 'var(--bg-surface)',
                         borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${res.success ? 'var(--border-subtle)' : 'rgba(239, 68, 68, 0.3)'}`,
+                        background: res.success ? 'rgba(16, 185, 129, 0.06)' : 'rgba(239, 68, 68, 0.06)',
+                        border: res.success ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '13px' }}>{plat.icon}</span>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: plat.color }}>
-                            {plat.name}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#ffffff', minWidth: 0 }}>
+                          <span>{plat.icon}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {res.title || res.filename || res.url}
                           </span>
                         </div>
 
                         {res.success ? (
-                          <span className="badge badge-success" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle2 size={12} />
-                            {publishMode === 'SCHEDULE' ? 'Scheduled' : publishMode === 'POST_NOW' ? 'Publishing' : 'In Library'}
+                          <span style={{ fontSize: '11px', color: '#34d399', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                            <CheckCircle2 size={13} />
+                            <span>Done</span>
                           </span>
                         ) : (
-                          <span className="badge badge-danger" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <AlertCircle size={12} />
-                            Failed
+                          <span style={{ fontSize: '11px', color: '#f87171', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                            <AlertCircle size={13} />
+                            <span>Failed</span>
                           </span>
                         )}
-                      </div>
-
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {res.title || res.filename || res.url}
                       </div>
 
                       {res.error && (
@@ -557,6 +704,143 @@ https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlaze
           </div>
         </div>
       </div>
+
+      {/* Platform Connect Modal */}
+      {activeModalPlatform && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-card" style={{
+            width: '100%',
+            maxWidth: '520px',
+            padding: '28px',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Key size={18} color="var(--primary)" />
+                Connect {activeModalPlatform} Account Session
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActiveModalPlatform(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {modalMessage && (
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                fontSize: '12.5px',
+                marginBottom: '16px',
+                background: modalMessage.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: modalMessage.type === 'success' ? '#6ee7b7' : '#fca5a5',
+                border: modalMessage.type === 'success' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                {modalMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                <span>{modalMessage.text}</span>
+              </div>
+            )}
+
+            <div style={{
+              background: 'rgba(6, 182, 212, 0.08)',
+              border: '1px solid rgba(6, 182, 212, 0.2)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '16px',
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.5'
+            }}>
+              <div style={{ fontWeight: 700, color: 'var(--primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Info size={14} />
+                <span>How to connect in 15 seconds:</span>
+              </div>
+              <ol style={{ paddingLeft: '18px', margin: 0 }}>
+                <li>Open <strong>{activeModalPlatform}</strong> in your browser (make sure you are logged in).</li>
+                <li>Use any free cookie extension (e.g. <em>"Get cookies.txt LOCALLY"</em> or <em>"Cookie-Editor"</em>).</li>
+                <li>Click <strong>Export / Copy</strong> and paste the cookies text below, OR upload the <code>cookies.txt</code> file.</li>
+              </ol>
+            </div>
+
+            <form onSubmit={handleConnectPlatform} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Account Label / Nickname:
+                </label>
+                <input
+                  type="text"
+                  value={accountNameInput}
+                  onChange={e => setAccountNameInput(e.target.value)}
+                  placeholder={`My ${activeModalPlatform} Account`}
+                  className="input-control"
+                  style={{ height: '38px', fontSize: '13px' }}
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Paste Session Cookies (Netscape / Header format):
+                  </label>
+                  <label style={{ fontSize: '11px', color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Upload size={12} />
+                    <span>Upload .txt file</span>
+                    <input type="file" accept=".txt" onChange={handleFileUpload} style={{ display: 'none' }} />
+                  </label>
+                </div>
+                <textarea
+                  value={cookiesInput}
+                  onChange={e => setCookiesInput(e.target.value)}
+                  placeholder="# Netscape HTTP Cookie File&#10;.youtube.com    TRUE    /    TRUE    ...&#10;OR paste raw cookie string here"
+                  rows={6}
+                  required
+                  className="input-control"
+                  style={{ fontFamily: 'monospace', fontSize: '11.5px', resize: 'vertical', padding: '10px' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveModalPlatform(null)}
+                  className="btn btn-secondary"
+                  style={{ fontSize: '13px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCookies || !cookiesInput.trim()}
+                  className="btn btn-primary"
+                  style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Key size={14} />
+                  <span>{isSavingCookies ? 'Connecting Session...' : 'Save & Connect Session'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

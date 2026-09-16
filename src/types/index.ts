@@ -18,6 +18,18 @@ export interface Session {
   createdAt: string;
 }
 
+export type SocialPlatformType = 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'SNAPCHAT' | 'KUAISHOU' | 'REDNOTE' | 'TWITTER';
+
+export interface ConnectedPlatformAccount {
+  id: string;
+  userId: string;
+  platform: SocialPlatformType;
+  accountName?: string;
+  hasCookies: boolean;
+  status: 'CONNECTED' | 'DISCONNECTED';
+  updatedAt: string;
+}
+
 export interface FacebookAccount {
   id: string;
   userId: string;

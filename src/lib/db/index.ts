@@ -16,7 +16,9 @@ import {
   PostingHistory,
   ScheduleRule,
   SystemLog,
-  SystemSettings
+  SystemSettings,
+  ConnectedPlatformAccount,
+  SocialPlatformType
 } from '@/types';
 
 interface DatabaseSchema {
@@ -34,6 +36,7 @@ interface DatabaseSchema {
   schedules: ScheduleRule[];
   logs: SystemLog[];
   settings: SystemSettings;
+  platformAccounts?: ConnectedPlatformAccount[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -330,6 +333,40 @@ class DatabaseStore {
 
   deleteSession(token: string): void {
     this.data.sessions = this.data.sessions.filter(s => s.token !== token);
+    this.save();
+  }
+
+  // Connected Social Platform Accounts (YouTube, TikTok, Instagram, Snapchat, etc.)
+  getPlatformAccountsForUser(userId: string): ConnectedPlatformAccount[] {
+    if (!this.data.platformAccounts) this.data.platformAccounts = [];
+    return this.data.platformAccounts.filter(p => p.userId === userId);
+  }
+
+  getPlatformAccount(userId: string, platform: SocialPlatformType): ConnectedPlatformAccount | undefined {
+    if (!this.data.platformAccounts) this.data.platformAccounts = [];
+    return this.data.platformAccounts.find(p => p.userId === userId && p.platform === platform);
+  }
+
+  savePlatformAccount(account: Omit<ConnectedPlatformAccount, 'id' | 'updatedAt'>): ConnectedPlatformAccount {
+    if (!this.data.platformAccounts) this.data.platformAccounts = [];
+    const idx = this.data.platformAccounts.findIndex(p => p.userId === account.userId && p.platform === account.platform);
+    const updated: ConnectedPlatformAccount = {
+      ...account,
+      id: idx >= 0 ? this.data.platformAccounts[idx].id : 'plat-' + uuidv4().slice(0, 8),
+      updatedAt: new Date().toISOString(),
+    };
+    if (idx >= 0) {
+      this.data.platformAccounts[idx] = updated;
+    } else {
+      this.data.platformAccounts.push(updated);
+    }
+    this.save();
+    return updated;
+  }
+
+  disconnectPlatformAccount(userId: string, platform: SocialPlatformType): void {
+    if (!this.data.platformAccounts) return;
+    this.data.platformAccounts = this.data.platformAccounts.filter(p => !(p.userId === userId && p.platform === platform));
     this.save();
   }
 

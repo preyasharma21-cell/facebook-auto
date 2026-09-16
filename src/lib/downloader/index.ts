@@ -57,6 +57,19 @@ export class VideoDownloaderService {
     logEvent('INFO', 'IMPORT', `Initiating automated video download from ${platform}: ${videoUrl}`);
 
     return new Promise((resolve) => {
+      // Check for user-connected session cookies for this platform
+      const cookiesDir = path.join(process.cwd(), 'data', 'cookies');
+      const platformKey = platform.toLowerCase();
+      const userCookiePath = options.userId ? path.join(cookiesDir, `${options.userId}_${platformKey}.txt`) : '';
+      const fallbackCookiePath = path.join(cookiesDir, `default_${platformKey}.txt`);
+
+      let cookieToUse = '';
+      if (userCookiePath && fs.existsSync(userCookiePath)) {
+        cookieToUse = userCookiePath;
+      } else if (fs.existsSync(fallbackCookiePath)) {
+        cookieToUse = fallbackCookiePath;
+      }
+
       // Execute python -m yt_dlp with bot-bypass flags
       const args = [
         '-m', 'yt_dlp',
@@ -68,8 +81,14 @@ export class VideoDownloaderService {
         '--merge-output-format', 'mp4',
         '-o', outputTemplate,
         '--write-info-json',
-        videoUrl,
       ];
+
+      if (cookieToUse) {
+        args.push('--cookies', cookieToUse);
+        logEvent('INFO', 'IMPORT', `Applying connected ${platform} user session cookies for authenticated download`);
+      }
+
+      args.push(videoUrl);
 
       const isWin = process.platform === 'win32';
       const pathSep = isWin ? ';' : ':';
