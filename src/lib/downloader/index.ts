@@ -57,11 +57,13 @@ export class VideoDownloaderService {
     logEvent('INFO', 'IMPORT', `Initiating automated video download from ${platform}: ${videoUrl}`);
 
     return new Promise((resolve) => {
-      // Execute python -m yt_dlp
+      // Execute python -m yt_dlp with bot-bypass flags
       const args = [
         '-m', 'yt_dlp',
         '--no-playlist',
         '--no-warnings',
+        '--impersonate', 'chrome',
+        '--extractor-args', 'youtube:player_client=android,ios',
         '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         '--merge-output-format', 'mp4',
         '-o', outputTemplate,
@@ -69,10 +71,20 @@ export class VideoDownloaderService {
         videoUrl,
       ];
 
-      const proc = spawn('python', args, {
+      const isWin = process.platform === 'win32';
+      const pathSep = isWin ? ';' : ':';
+      const extraPaths = isWin
+        ? 'C:\\Users\\My PC\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0-full_build\\bin;C:\\Users\\My PC\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python313\\Scripts'
+        : '/opt/venv/bin:/usr/local/bin:/usr/bin:/bin';
+
+      const pythonBin = !isWin && process.env.VIRTUAL_ENV
+        ? `${process.env.VIRTUAL_ENV}/bin/python`
+        : 'python';
+
+      const proc = spawn(pythonBin, args, {
         env: {
           ...process.env,
-          PATH: `${process.env.PATH};C:\\Users\\My PC\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0-full_build\\bin;C:\\Users\\My PC\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python313\\Scripts`,
+          PATH: `${extraPaths}${pathSep}${process.env.PATH || ''}`,
         },
       });
 
