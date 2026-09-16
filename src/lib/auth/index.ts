@@ -1,11 +1,35 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db } from '@/lib/db';
 import { User, UserRole } from '@/types';
 
 export const SESSION_COOKIE_NAME = 'fb_autopilot_session';
 const SESSION_DURATION_DAYS = 7;
+const AUTH_SECRET = process.env.AUTH_SECRET || 'fb-autopilot-production-sec-2026';
+
+export function generateSignedSessionToken(userId: string, expiresAt: Date): string {
+  const exp = expiresAt.getTime();
+  const payload = `${userId}.${exp}`;
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+
+export function verifySignedSessionToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [userId, expStr, sig] = parts;
+    const exp = parseInt(expStr, 10);
+    if (isNaN(exp) || Date.now() > exp) return null;
+    const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(`${userId}.${exp}`).digest('hex');
+    if (sig !== expectedSig) return null;
+    return userId;
+  } catch {
+    return null;
+  }
+}
 
 export async function authenticateUser(
   username: string,
@@ -30,7 +54,8 @@ export async function authenticateUser(
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
-  const session = db.createSession(user.id, expiresAt);
+  const token = generateSignedSessionToken(user.id, expiresAt);
+  const session = db.createSession(user.id, expiresAt, token);
 
   db.addLog({
     level: 'INFO',
@@ -75,7 +100,8 @@ export async function registerUser(
 
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS);
-  const session = db.createSession(newUser.id, expiresAt);
+  const token = generateSignedSessionToken(newUser.id, expiresAt);
+  const session = db.createSession(newUser.id, expiresAt, token);
 
   db.addLog({
     level: 'INFO',
@@ -97,6 +123,15 @@ export async function authenticateOwner(password: string): Promise<{ success: bo
 
 export function verifySessionToken(token?: string): User | null {
   if (!token) return null;
+
+  // 1. First check stateless signed token (survives any server/container restarts)
+  const signedUserId = verifySignedSessionToken(token);
+  if (signedUserId) {
+    const user = db.getUserById(signedUserId);
+    if (user) return user;
+  }
+
+  // 2. Fall back to database session table
   const session = db.getSessionByToken(token);
   if (!session) return null;
   const user = db.getUserById(session.userId);
@@ -127,7 +162,7 @@ export function requireAuth(req: NextRequest): { user: User } | { response: Next
   if (!user) {
     return {
       response: NextResponse.json(
-        { error: 'Unauthorized: User session required' },
+        { error: 'Unauthorized: User session required. Please log in again.' },
         { status: 401 }
       ),
     };

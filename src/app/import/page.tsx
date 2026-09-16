@@ -90,6 +90,12 @@ export default function UniversalDownloaderPage() {
         }),
       });
 
+      if (response.status === 401) {
+        alert('Session Expired: Please log in again to continue.');
+        window.location.href = '/login';
+        return;
+      }
+
       const data = await response.json();
 
       if (data.results) {

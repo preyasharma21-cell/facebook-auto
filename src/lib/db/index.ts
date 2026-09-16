@@ -305,11 +305,11 @@ class DatabaseStore {
   }
 
   // Sessions
-  createSession(userId: string, expiresAt: Date): Session {
+  createSession(userId: string, expiresAt: Date, customToken?: string): Session {
     const session: Session = {
       id: uuidv4(),
       userId,
-      token: uuidv4() + '-' + uuidv4(),
+      token: customToken || (uuidv4() + '-' + uuidv4()),
       expiresAt: expiresAt.toISOString(),
       createdAt: new Date().toISOString(),
     };
